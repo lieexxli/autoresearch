@@ -453,7 +453,7 @@ class MuonAdamW(torch.optim.Optimizer):
 
 # Model architecture
 # Preset tuned for a single A100 run within the fixed 5-minute budget.
-ASPECT_RATIO = 64       # model_dim = depth * ASPECT_RATIO
+ASPECT_RATIO = 80       # model_dim = depth * ASPECT_RATIO
 HEAD_DIM = 128          # target head dimension for attention
 WINDOW_PATTERN = "SSSL" # sliding window pattern: L=full, S=half context
 
