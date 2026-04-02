@@ -16,8 +16,12 @@ queue/
 CLAUDE.md
 AGENTS.md
 
+# Local translated variants
+*_zh.md
+*_zh.py
+
 # Experimental code/artifacts
 dev/
 
 # Results file
-results.tsv
+# results.tsv
