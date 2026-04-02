@@ -2,6 +2,9 @@
 
 This is an experiment to have the LLM do its own research.
 
+Current target platform: **single NVIDIA A100 80GB**.
+The checked-in `train.py` baseline is already tuned as a conservative starting point for this machine.
+
 ## Setup
 
 To set up a new experiment, work with the user to:
@@ -12,15 +15,23 @@ To set up a new experiment, work with the user to:
    - `README.md` — repository context.
    - `prepare.py` — fixed constants, data prep, tokenizer, dataloader, evaluation. Do not modify.
    - `train.py` — the file you modify. Model architecture, optimizer, training loop.
-4. **Verify data exists**: Check that `~/.cache/autoresearch/` contains data shards and a tokenizer. If not, tell the human to run `uv run prepare.py`.
-5. **Initialize results.tsv**: Create `results.tsv` with just the header row. The baseline will be recorded after the first run.
+4. **Verify data exists**: Check that `~/.cache/autoresearch/` contains a tokenizer and at least **64 training shards** plus the pinned validation shard. If not, run `uv run prepare.py --num-shards 64` yourself. Only ask the human if you are blocked by permissions, missing tools, or network access.
+5. **Initialize results.tsv**: Create `results.tsv` with just the header row if it does not already exist. The baseline will be recorded after the first run.
 6. **Confirm and go**: Confirm setup looks good.
 
 Once you get confirmation, kick off the experimentation.
 
 ## Experimentation
 
-Each experiment runs on a single GPU. The training script runs for a **fixed time budget of 5 minutes** (wall clock training time, excluding startup/compilation). You launch it simply as: `uv run train.py`.
+Each experiment runs on a **single A100 80GB GPU**. The training script runs for a **fixed time budget of 5 minutes** (wall clock training time, excluding startup/compilation). You launch it simply as: `uv run train.py`.
+
+The current checked-in baseline in `train.py` is the machine-specific starting point for this repo:
+- `DEPTH = 6`
+- `DEVICE_BATCH_SIZE = 128`
+- `TOTAL_BATCH_SIZE = 2**18`
+- `WINDOW_PATTERN = "SSSL"`
+
+Do **not** change any of these before the first baseline run. Establish the baseline exactly as checked in, then iterate from there.
 
 **What you CAN do:**
 - Modify `train.py` — this is the only file you edit. Everything is fair game: model architecture, optimizer, hyperparameters, training loop, batch size, model size, etc.
@@ -36,11 +47,11 @@ Each experiment runs on a single GPU. The training script runs for a **fixed tim
 
 **Simplicity criterion**: All else being equal, simpler is better. A small improvement that adds ugly complexity is not worth it. Conversely, removing something and getting equal or better results is a great outcome — that's a simplification win. When evaluating whether to keep a change, weigh the complexity cost against the improvement magnitude. A 0.001 val_bpb improvement that adds 20 lines of hacky code? Probably not worth it. A 0.001 val_bpb improvement from deleting code? Definitely keep. An improvement of ~0 but much simpler code? Keep.
 
-**The first run**: Your very first run should always be to establish the baseline, so you will run the training script as is.
+**The first run**: Your very first run should always be to establish the baseline, so you will run the training script exactly as is.
 
 ## Output format
 
-Once the script finishes it prints a summary like this:
+Once the script finishes it prints a summary like this (values are illustrative and depend on the exact machine/config):
 
 ```
 ---
@@ -52,7 +63,7 @@ mfu_percent:      39.80
 total_tokens_M:   499.6
 num_steps:        953
 num_params_M:     50.3
-depth:            8
+depth:            6
 ```
 
 Note that the script is configured to always stop after 5 minutes, so depending on the computing platform of this computer the numbers might look different. You can extract the key metric from the log file:
