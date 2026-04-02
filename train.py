@@ -23,6 +23,28 @@ cap = torch.cuda.get_device_capability()
 repo = "varunneal/flash-attention-3" if cap == (9, 0) else "kernels-community/flash-attn3"
 fa3 = get_kernel(repo).flash_attn_interface
 
+# BF16 theoretical peak FLOPs for selected single-GPU configs used for MFU reporting.
+# Keys are normalized substrings (uppercased) matched against cuda device names.
+PEAK_BF16_FLOPS_BY_DEVICE_NAME = {
+    "H100": 989e12,
+    "A100": 312e12,
+}
+PEAK_BF16_FLOPS_BY_COMPUTE_CAPABILITY = {
+    (9, 0): 989e12,  # Hopper class fallback
+    (8, 0): 312e12,  # A100 class fallback
+}
+
+
+def resolve_mfu_peak_flops(gpu_name, compute_capability):
+    normalized_name = gpu_name.upper()
+    for key, peak_flops in PEAK_BF16_FLOPS_BY_DEVICE_NAME.items():
+        if key in normalized_name:
+            return peak_flops, f"device-name:{key}"
+    peak_flops = PEAK_BF16_FLOPS_BY_COMPUTE_CAPABILITY.get(compute_capability)
+    if peak_flops is not None:
+        return peak_flops, f"compute-capability:{compute_capability[0]}.{compute_capability[1]}"
+    return None, None
+
 from prepare import MAX_SEQ_LEN, TIME_BUDGET, Tokenizer, make_dataloader, evaluate_bpb
 
 # ---------------------------------------------------------------------------
@@ -449,7 +471,7 @@ FINAL_LR_FRAC = 0.0     # final LR as fraction of initial
 
 # Model size
 DEPTH = 6               # number of transformer layers
-DEVICE_BATCH_SIZE = 128  # per-device batch size on A100; reduce if needed
+DEVICE_BATCH_SIZE = 128  # per-device batch size (tuned on A100); reduce if needed
 
 # ---------------------------------------------------------------------------
 # Setup: tokenizer, model, optimizer, dataloader
@@ -461,13 +483,18 @@ torch.cuda.manual_seed(42)
 torch.set_float32_matmul_precision("high")
 device = torch.device("cuda")
 autocast_ctx = torch.amp.autocast(device_type="cuda", dtype=torch.bfloat16)
-GPU_LABEL = "A100 x1"
-A100_BF16_PEAK_FLOPS = 312e12
+gpu_name = torch.cuda.get_device_name()
+GPU_LABEL = f"{gpu_name} x1"
+mfu_peak_flops, mfu_peak_source = resolve_mfu_peak_flops(gpu_name, cap)
 
 tokenizer = Tokenizer.from_directory()
 vocab_size = tokenizer.get_vocab_size()
 print(f"Vocab size: {vocab_size:,}")
 print(f"Target hardware preset: {GPU_LABEL}")
+if mfu_peak_flops is None:
+    print(f"MFU baseline: mfu unavailable (gpu='{gpu_name}', cc={cap[0]}.{cap[1]})")
+else:
+    print(f"MFU baseline FLOPs: {mfu_peak_flops:.3e} ({mfu_peak_source})")
 
 def build_model_config(depth):
     base_dim = depth * ASPECT_RATIO
@@ -587,10 +614,11 @@ while True:
     debiased_smooth_loss = smooth_train_loss / (1 - ema_beta**(step + 1))
     pct_done = 100 * progress
     tok_per_sec = int(TOTAL_BATCH_SIZE / dt)
-    mfu = 100 * num_flops_per_token * TOTAL_BATCH_SIZE / dt / A100_BF16_PEAK_FLOPS
+    mfu = None if mfu_peak_flops is None else 100 * num_flops_per_token * TOTAL_BATCH_SIZE / dt / mfu_peak_flops
+    mfu_text = "mfu unavailable" if mfu is None else f"mfu: {mfu:.1f}%"
     remaining = max(0, TIME_BUDGET - total_training_time)
 
-    print(f"\rstep {step:05d} ({pct_done:.1f}%) | loss: {debiased_smooth_loss:.6f} | lrm: {lrm:.2f} | dt: {dt*1000:.0f}ms | tok/sec: {tok_per_sec:,} | mfu: {mfu:.1f}% | epoch: {epoch} | remaining: {remaining:.0f}s    ", end="", flush=True)
+    print(f"\rstep {step:05d} ({pct_done:.1f}%) | loss: {debiased_smooth_loss:.6f} | lrm: {lrm:.2f} | dt: {dt*1000:.0f}ms | tok/sec: {tok_per_sec:,} | {mfu_text} | epoch: {epoch} | remaining: {remaining:.0f}s    ", end="", flush=True)
 
     # GC management (Python's GC causes ~500ms stalls)
     if step == 0:
@@ -618,7 +646,9 @@ with autocast_ctx:
 # Final summary
 t_end = time.time()
 startup_time = t_start_training - t_start
-steady_state_mfu = 100 * num_flops_per_token * TOTAL_BATCH_SIZE * (step - 10) / total_training_time / A100_BF16_PEAK_FLOPS if total_training_time > 0 else 0
+steady_state_mfu = None
+if mfu_peak_flops is not None and total_training_time > 0:
+    steady_state_mfu = 100 * num_flops_per_token * TOTAL_BATCH_SIZE * (step - 10) / total_training_time / mfu_peak_flops
 peak_vram_mb = torch.cuda.max_memory_allocated() / 1024 / 1024
 
 print("---")
@@ -626,7 +656,10 @@ print(f"val_bpb:          {val_bpb:.6f}")
 print(f"training_seconds: {total_training_time:.1f}")
 print(f"total_seconds:    {t_end - t_start:.1f}")
 print(f"peak_vram_mb:     {peak_vram_mb:.1f}")
-print(f"mfu_percent:      {steady_state_mfu:.2f}")
+if steady_state_mfu is None:
+    print("mfu_percent:      mfu unavailable")
+else:
+    print(f"mfu_percent:      {steady_state_mfu:.2f}")
 print(f"total_tokens_M:   {total_tokens / 1e6:.1f}")
 print(f"num_steps:        {step}")
 print(f"num_params_M:     {num_params / 1e6:.1f}")
