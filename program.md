@@ -5,6 +5,34 @@ This is an experiment to have the LLM do its own research.
 Current target platform: **single NVIDIA A100 80GB**.
 The checked-in `train.py` baseline is already tuned as a conservative starting point for this machine.
 
+## Resume Notes (April 2, 2026)
+
+- Best local result in `results.tsv` so far: commit `0610fb5`, `val_bpb 1.029759`, `memory_gb 19.7`.
+- The checked-in `train.py` should now be treated as the new A100 baseline before doing any further tuning.
+- Consult the local `results.tsv` for the full experiment history, but do not commit it.
+
+What worked today:
+
+- Switching intermediate layers to local attention was the biggest win. The current code uses `WINDOW_PATTERN = "S"`, keeps the final layer global, and sets the short window to `sequence_len // 8`.
+- Reducing batch size was also a major win. The best run uses `TOTAL_BATCH_SIZE = 2**17` and `DEVICE_BATCH_SIZE = 64`.
+- A slightly higher Muon matrix LR helped: `MATRIX_LR = 0.032`.
+- Longer decay helped on the small-batch setup. The current best uses `WARMDOWN_RATIO = 0.8` and `FINAL_LR_FRAC = 0.05`.
+
+What did not work today:
+
+- `DEPTH = 8`
+- 576d width with 64d heads
+- 8 attention heads at 512d
+- Shrinking the short window further to `sequence_len // 16`
+- Reducing batch again to `TOTAL_BATCH_SIZE = 2**16` and `DEVICE_BATCH_SIZE = 32`
+- Lowering `FINAL_LR_FRAC` further to `0.02`
+- Increasing `WARMDOWN_RATIO` further to `0.9`
+
+Good next directions:
+
+- Search locally around the current best setup instead of retesting the losing directions above.
+- Good nearby knobs are `WARMUP_RATIO`, `EMBEDDING_LR`, `UNEMBEDDING_LR`, `WEIGHT_DECAY`, and small variants around the `sequence_len // 8` short window.
+
 ## Setup
 
 To set up a new experiment, work with the user to:
@@ -26,10 +54,12 @@ Once you get confirmation, kick off the experimentation.
 Each experiment runs on a **single A100 80GB GPU**. The training script runs for a **fixed time budget of 5 minutes** (wall clock training time, excluding startup/compilation). You launch it simply as: `uv run train.py`.
 
 The current checked-in baseline in `train.py` is the machine-specific starting point for this repo:
-- `DEPTH = 6`
-- `DEVICE_BATCH_SIZE = 128`
-- `TOTAL_BATCH_SIZE = 2**18`
-- `WINDOW_PATTERN = "SSSL"`
+- `DEPTH = 7`
+- `DEVICE_BATCH_SIZE = 64`
+- `TOTAL_BATCH_SIZE = 2**17`
+- `WINDOW_PATTERN = "S"`
+
+The current checked-in code also uses a short local window of `sequence_len // 8` for intermediate layers and forces the final layer to full attention.
 
 Do **not** change any of these before the first baseline run. Establish the baseline exactly as checked in, then iterate from there.
 
