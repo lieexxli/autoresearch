@@ -1,0 +1,28 @@
+commit	val_bpb	memory_gb	status	description
+2b0d03f	1.059162	26.4	keep	baseline
+fc4dcc8	1.060413	26.4	discard	shorten LR warmdown to last quarter
+9b7acfc	1.048669	33.9	keep	increase width from 384 to 512
+a1f644c	1.045843	39.0	keep	add one more 512d layer
+6b66308	1.048791	39.0	discard	use full attention windows
+acf31a9	1.050510	43.8	discard	add an eighth 512d layer
+154b430	1.044496	39.0	keep	add 5 percent warmup
+6dcba6e	1.047385	39.0	discard	increase warmup to 10 percent
+eff7f41	1.044096	39.0	keep	keep 10 percent final LR
+ade3ad7	1.045507	39.0	discard	keep 20 percent final LR
+d4adc3e	1.044429	39.0	discard	reduce Muon weight decay
+0f20106	1.044514	39.0	discard	lower Muon matrix LR slightly
+7049963	1.060634	43.5	discard	increase width to 576 with 64d heads
+4e57874	1.053550	39.1	discard	use 8 attention heads at 512d
+c6c2254	1.043840	39.0	keep	use short windows in all intermediate layers
+35d5533	1.039225	39.0	keep	reduce short attention window to quarter context
+07139e1	1.036225	39.0	keep	reduce short attention window to eighth context
+4206e8d	1.039224	39.0	discard	reduce short attention window to sixteenth context
+d44d599	1.036115	39.0	keep	raise Muon matrix LR slightly on 1/8 context
+10ef3d2	1.038717	43.8	discard	try depth 8 on 1/8 context schedule
+fd07943	1.031060	19.7	keep	try smaller total batch with 64 device batch
+3bddf96	1.040144	10.1	discard	try smaller total batch with 32 device batch
+3720ec8	1.030021	19.7	keep	lower final LR fraction on small batch setup
+98201a6	1.030481	19.7	discard	lower final LR fraction further on small batch setup
+6748e97	1.029867	19.7	keep	start warmdown earlier on small batch setup
+0610fb5	1.029759	19.7	keep	start warmdown even earlier on small batch setup
+fe8a594	1.030447	19.7	discard	start warmdown at nearly full schedule on small batch setup
